@@ -1,0 +1,6 @@
+@Cars.Mcp_HostAddress = http://localhost:5052
+
+GET {{Cars.Mcp_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

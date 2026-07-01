@@ -9,6 +9,8 @@
 # Article dir
 articles/
 
+appsettings.Development.json
+
 # User-specific files
 *.rsuser
 *.suo
