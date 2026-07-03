@@ -1,0 +1,392 @@
+﻿@{
+    ViewData["Title"] = "Chat";
+}
+
+<style>
+    .consent-card {
+        width: 90%;
+        background: #fff;
+        border: 1px solid #e6e1f2;
+        border-left: 4px solid #8661c5;
+        border-radius: 12px;
+        padding: 14px 16px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, .06);
+    }
+    .consent-icon { color: #8661c5; line-height: 1; margin-top: 2px; }
+    .consent-text { font-size: .92rem; line-height: 1.5; color: #3a3a3a; }
+    .btn-consent {
+        background: linear-gradient(135deg, #8661c5, #6f4fb0);
+        border: none;
+        color: #fff;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .btn-consent:hover, .btn-consent:focus { background: linear-gradient(135deg, #7a55bd, #61449e); color: #fff; }
+    .btn-consent:disabled { opacity: .65; }
+    .btn-consent-cancel {
+        background: transparent;
+        border: 1px solid #d3d3d3;
+        color: #444;
+        font-weight: 500;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .btn-consent-cancel:hover, .btn-consent-cancel:focus { background: #f4f2f9; color: #333; }
+</style>
+
+<div class="d-flex flex-column" style="height:100vh;">
+    <!-- Header -->
+    <div class="d-flex align-items-center justify-content-between px-4 py-3 border-bottom bg-white shadow-sm" style="flex-shrink:0;">
+        <div class="d-flex align-items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" fill="#0d6efd" viewBox="0 0 16 16">
+                <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 13A6 6 0 1 1 8 2a6 6 0 0 1 0 12z"/>
+                <path d="M5.5 6.5A.5.5 0 0 1 6 6h4a.5.5 0 0 1 0 1H6a.5.5 0 0 1-.5-.5zM6 9h4a.5.5 0 0 1 0 1H6a.5.5 0 0 1 0-1z"/>
+            </svg>
+            <span class="fw-semibold fs-5 text-dark">Chat</span>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            <span id="statusBadge" class="badge bg-secondary">No conversation</span>
+            <button id="btnNewConversation" class="btn btn-primary btn-sm">New conversation</button>
+            <button id="btnClearChat" class="btn btn-outline-danger btn-sm" disabled>Clear</button>
+        </div>
+    </div>
+
+    <!-- Messages -->
+    <div id="messagesContainer" class="flex-grow-1 overflow-auto px-4 py-3 bg-light">
+        <div id="welcomeMsg" class="flex-column align-items-center justify-content-center h-100 text-muted" style="display:flex;">
+            <p class="mb-2 fs-5">Start a new conversation to begin chatting.</p>
+            <button class="btn btn-primary" onclick="startConversation()">Start conversation</button>
+        </div>
+        <div id="messagesList" class="flex-column gap-3" style="display:none;"></div>
+    </div>
+
+    <!-- Input -->
+    <div class="px-4 py-3 border-top bg-white" style="flex-shrink:0;">
+        <div class="d-flex gap-2 align-items-end">
+            <textarea id="messageInput"
+                      class="form-control"
+                      rows="2"
+                      placeholder="Type your message..."
+                      disabled
+                      style="resize:none; border-radius:12px;"></textarea>
+            <button id="btnSend"
+                    class="btn btn-primary"
+                    disabled
+                    style="height:56px; min-width:80px; border-radius:12px;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M15.854.146a.5.5 0 0 1 .11.54l-5.819 14.547a.75.75 0 0 1-1.329.124l-3.178-4.995L.643 7.184a.75.75 0 0 1 .124-1.33L15.314.037a.5.5 0 0 1 .54.11z"/>
+                </svg>
+            </button>
+        </div>
+        <div id="errorMsg" class="text-danger mt-2 small d-none"></div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    let conversationId = null;
+
+    const messagesContainer = document.getElementById('messagesContainer');
+    const welcomeMsg = document.getElementById('welcomeMsg');
+    const messagesList = document.getElementById('messagesList');
+    const messageInput = document.getElementById('messageInput');
+    const btnSend = document.getElementById('btnSend');
+    const btnNewConversation = document.getElementById('btnNewConversation');
+    const btnClearChat = document.getElementById('btnClearChat');
+    const statusBadge = document.getElementById('statusBadge');
+    const errorMsg = document.getElementById('errorMsg');
+
+    btnNewConversation.addEventListener('click', startConversation);
+    btnClearChat.addEventListener('click', clearChat);
+    btnSend.addEventListener('click', sendMessage);
+    messageInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            if (!btnSend.disabled) sendMessage();
+        }
+    });
+
+    async function startConversation() {
+        setLoading(true);
+        hideError();
+        try {
+            const res = await fetch('/api/chat/conversations', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            if (!res.ok) throw new Error(`Server error: ${res.status}`);
+            const data = await res.json();
+            conversationId = data.conversationId;
+            messagesList.innerHTML = '';
+            welcomeMsg.style.display = 'none';
+            messagesList.style.display = 'flex';
+            messageInput.disabled = false;
+            btnSend.disabled = false;
+            btnClearChat.disabled = false;
+            statusBadge.textContent = 'Active';
+            statusBadge.className = 'badge bg-success';
+            messageInput.focus();
+        } catch (e) {
+            showError('Failed to start conversation: ' + e.message);
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    function clearChat() {
+        conversationId = null;
+        messagesList.innerHTML = '';
+        messagesList.style.display = 'none';
+        welcomeMsg.style.display = 'flex';
+        messageInput.disabled = true;
+        messageInput.value = '';
+        btnSend.disabled = true;
+        btnClearChat.disabled = true;
+        statusBadge.textContent = 'No conversation';
+        statusBadge.className = 'badge bg-secondary';
+        hideError();
+    }
+
+    async function sendMessage() {
+        const text = messageInput.value.trim();
+        if (!text || !conversationId) return;
+
+        appendMessage('user', text);
+        messageInput.value = '';
+        messageInput.disabled = true;
+        btnSend.disabled = true;
+        hideError();
+
+        const typingId = appendTyping();
+
+        try {
+            const res = await fetch(`/api/chat/conversations/${encodeURIComponent(conversationId)}/responses`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: text })
+            });
+            removeTyping(typingId);
+            if (!res.ok) throw new Error(`Server error: ${res.status}`);
+            const data = await res.json();
+            handleChatResponse(data, text);
+        } catch (e) {
+            removeTyping(typingId);
+            showError('Failed to send message: ' + e.message);
+        } finally {
+            messageInput.disabled = false;
+            btnSend.disabled = false;
+            messageInput.focus();
+            scrollToBottom();
+        }
+    }
+
+    function appendMessage(role, text) {
+        welcomeMsg.style.display = 'none';
+        messagesList.style.display = 'flex';
+
+        const isUser = role === 'user';
+        const wrapper = document.createElement('div');
+        wrapper.className = `d-flex flex-column ${isUser ? 'align-items-end' : 'align-items-start'}`;
+
+        const bubble = document.createElement('div');
+        bubble.style.cssText = `${isUser ? 'max-width:70%' : 'width:90%'}; padding:10px 16px; border-radius:${isUser ? '18px 18px 4px 18px' : '18px 18px 18px 4px'}; word-break:break-word; white-space:pre-wrap;`;
+        bubble.className = isUser ? 'bg-primary text-white' : 'bg-white border text-dark shadow-sm';
+        bubble.textContent = text;
+        wrapper.appendChild(bubble);
+
+        messagesList.appendChild(wrapper);
+        scrollToBottom();
+    }
+
+    function handleChatResponse(data, originalMessage) {
+        if (data && data.status === 'oauth_consent_required') {
+            appendConsentCard(data, originalMessage);
+        } else {
+            appendMessage('assistant', (data && data.outputText) || '');
+        }
+        scrollToBottom();
+    }
+
+    function appendConsentCard(data, originalMessage) {
+        welcomeMsg.style.display = 'none';
+        messagesList.style.display = 'flex';
+
+        const label = (data.consentServerLabel || '').trim() || 'the MCP tool';
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'd-flex flex-column align-items-start w-100';
+
+        const card = document.createElement('div');
+        card.className = 'consent-card';
+
+        const row = document.createElement('div');
+        row.className = 'd-flex align-items-start gap-3';
+
+        const icon = document.createElement('div');
+        icon.className = 'consent-icon';
+        icon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="currentColor" viewBox="0 0 16 16"><path d="M5.338 1.59a61 61 0 0 0-2.837.856.48.48 0 0 0-.328.39c-.554 4.157.726 7.19 2.253 9.188a10.7 10.7 0 0 0 2.287 2.233c.346.244.652.42.893.533q.18.085.293.118a1 1 0 0 0 .101.025 1 1 0 0 0 .1-.025q.114-.034.294-.118c.24-.113.547-.29.893-.533a10.7 10.7 0 0 0 2.287-2.233c1.527-1.997 2.807-5.031 2.253-9.188a.48.48 0 0 0-.328-.39c-.651-.213-1.75-.56-2.837-.855C9.552 1.29 8.531 1.067 8 1.067c-.53 0-1.552.223-2.662.524z"/><path d="M9.5 6.5a1.5 1.5 0 0 1-1 1.415l.385 1.99a.5.5 0 0 1-.491.595h-.788a.5.5 0 0 1-.49-.595l.384-1.99a1.5 1.5 0 1 1 2-1.415z"/></svg>';
+
+        const body = document.createElement('div');
+        body.className = 'flex-grow-1';
+
+        const text = document.createElement('div');
+        text.className = 'consent-text';
+        text.appendChild(document.createTextNode('Sign in to '));
+        const strong = document.createElement('strong');
+        strong.textContent = label;
+        text.appendChild(strong);
+        text.appendChild(document.createTextNode(
+            ' in order to allow the AI agent use ' + label + ' MCP tool. ' +
+            'If you are using a Third-Party Tool, it is a Non-Microsoft Product. ' +
+            'Use at your own risk and subject to third-party terms and data handling practices.'));
+
+        const actions = document.createElement('div');
+        actions.className = 'd-flex gap-2 mt-3 flex-wrap';
+
+        const openBtn = document.createElement('button');
+        openBtn.type = 'button';
+        openBtn.className = 'btn btn-consent btn-sm';
+        openBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8.636 3.5a.5.5 0 0 0-.5-.5H1.5A1.5 1.5 0 0 0 0 4.5v10A1.5 1.5 0 0 0 1.5 16h10a1.5 1.5 0 0 0 1.5-1.5V7.864a.5.5 0 0 0-1 0V14.5a.5.5 0 0 1-.5.5h-10a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 .5-.5h6.636a.5.5 0 0 0 .5-.5z"/><path fill-rule="evenodd" d="M16 .5a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0 0 1h3.793L6.146 9.146a.5.5 0 1 0 .708.708L15 1.707V5.5a.5.5 0 0 0 1 0z"/></svg> <span>Open consent</span>';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'btn btn-consent-cancel btn-sm';
+        cancelBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" fill="currentColor" viewBox="0 0 16 16"><path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8z"/></svg> <span>Cancel</span>';
+
+        openBtn.addEventListener('click', () =>
+            openConsentAndContinue(data.consentLink, data.responseId, originalMessage, wrapper, openBtn, cancelBtn));
+        cancelBtn.addEventListener('click', () => wrapper.remove());
+
+        actions.appendChild(openBtn);
+        actions.appendChild(cancelBtn);
+        body.appendChild(text);
+        body.appendChild(actions);
+        row.appendChild(icon);
+        row.appendChild(body);
+        card.appendChild(row);
+        wrapper.appendChild(card);
+        messagesList.appendChild(wrapper);
+        scrollToBottom();
+    }
+
+    function openConsentAndContinue(consentLink, previousResponseId, message, wrapper, openBtn, cancelBtn) {
+        if (!consentLink) {
+            showError('The consent link is missing. Please try again.');
+            return;
+        }
+        const popup = window.open(consentLink, 'oauth_consent', 'width=620,height=760');
+        setConsentWaiting(openBtn.parentElement, previousResponseId, message, wrapper, consentLink);
+        if (!popup) {
+            // Popup was blocked; the user can still open the link and continue manually.
+            return;
+        }
+        const timer = setInterval(() => {
+            if (popup.closed) {
+                clearInterval(timer);
+                continueAfterConsent(previousResponseId, message, wrapper);
+            }
+        }, 800);
+    }
+
+    function setConsentWaiting(actions, previousResponseId, message, wrapper, consentLink) {
+        actions.className = 'd-flex flex-column align-items-start gap-2 mt-3';
+        actions.innerHTML =
+            '<div class="d-flex align-items-center gap-2 text-muted small">' +
+            '<span class="spinner-border spinner-border-sm" role="status"></span>' +
+            '<span>Waiting for you to finish signing in\u2026</span></div>';
+
+        const buttons = document.createElement('div');
+        buttons.className = 'd-flex gap-2 flex-wrap';
+
+        const reopenLink = document.createElement('a');
+        reopenLink.href = consentLink;
+        reopenLink.target = 'oauth_consent';
+        reopenLink.rel = 'noopener';
+        reopenLink.className = 'btn btn-consent-cancel btn-sm';
+        reopenLink.textContent = 'Reopen consent';
+
+        const continueBtn = document.createElement('button');
+        continueBtn.type = 'button';
+        continueBtn.className = 'btn btn-consent btn-sm';
+        continueBtn.textContent = "I've finished \u2014 continue";
+        continueBtn.addEventListener('click', () => {
+            continueBtn.disabled = true;
+            continueAfterConsent(previousResponseId, message, wrapper);
+        });
+
+        buttons.appendChild(reopenLink);
+        buttons.appendChild(continueBtn);
+        actions.appendChild(buttons);
+    }
+
+    async function continueAfterConsent(previousResponseId, message, wrapper) {
+        if (wrapper.dataset.continuing === '1') return;
+        wrapper.dataset.continuing = '1';
+        wrapper.remove();
+        hideError();
+
+        const typingId = appendTyping();
+        try {
+            const res = await fetch(`/api/chat/conversations/${encodeURIComponent(conversationId)}/responses/continue`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message, previousResponseId })
+            });
+            removeTyping(typingId);
+            if (!res.ok) throw new Error(`Server error: ${res.status}`);
+            const data = await res.json();
+            handleChatResponse(data, message);
+        } catch (e) {
+            removeTyping(typingId);
+            showError('Failed to continue after consent: ' + e.message);
+        } finally {
+            scrollToBottom();
+        }
+    }
+
+    function appendTyping() {
+        const id = 'typing-' + Date.now();
+        const wrapper = document.createElement('div');
+        wrapper.id = id;
+        wrapper.className = 'd-flex justify-content-start';
+        wrapper.innerHTML = `<div class="bg-white border text-muted shadow-sm px-3 py-2" style="border-radius:18px 18px 18px 4px;">
+            <span class="spinner-grow spinner-grow-sm me-1" role="status"></span>
+            <span class="spinner-grow spinner-grow-sm me-1" role="status" style="animation-delay:.15s"></span>
+            <span class="spinner-grow spinner-grow-sm" role="status" style="animation-delay:.3s"></span>
+        </div>`;
+        messagesList.appendChild(wrapper);
+        scrollToBottom();
+        return id;
+    }
+
+    function removeTyping(id) {
+        const el = document.getElementById(id);
+        if (el) el.remove();
+    }
+
+    function scrollToBottom() {
+        const container = document.getElementById('messagesContainer');
+        container.scrollTop = container.scrollHeight;
+    }
+
+    function setLoading(val) {
+        btnNewConversation.disabled = val;
+        if (val) btnNewConversation.textContent = 'Starting...';
+        else btnNewConversation.textContent = 'New conversation';
+    }
+
+    function showError(msg) {
+        errorMsg.textContent = msg;
+        errorMsg.classList.remove('d-none');
+    }
+
+    function hideError() {
+        errorMsg.classList.add('d-none');
+        errorMsg.textContent = '';
+    }
+</script>
+}
+
